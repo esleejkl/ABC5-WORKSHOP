@@ -393,6 +393,75 @@
     padding-right:32px;
   }
 
+  .form-row{ margin-bottom:14px; }
+  .form-row label{
+    display:block;
+    font-size:12.5px;
+    font-weight:700;
+    color:var(--ink-soft);
+    margin-bottom:6px;
+  }
+  .form-row input[type="text"]{
+    width:100%;
+    font-family:'Google Sans Flex','Noto Sans KR', sans-serif;
+    font-size:15px;
+    color:var(--ink);
+    background:var(--paper);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:10px 11px;
+  }
+  .form-row input[type="text"]:focus{
+    outline:none;
+    border-color:var(--navy);
+    background:#fff;
+  }
+  .radio-row{ display:flex; gap:8px; }
+  .radio-pill{
+    flex:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+    font-size:13.5px;
+    font-weight:600;
+    color:var(--ink-soft);
+    background:var(--paper);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:9px 0;
+    cursor:pointer;
+  }
+  .radio-pill input{ accent-color:var(--navy); }
+  .radio-pill:has(input:checked){
+    color:var(--navy);
+    background:#EEF2F9;
+    border-color:#D6E0EF;
+  }
+  #sponsorSubmitBtn{
+    width:100%;
+    font-family:'Google Sans Flex','Noto Sans KR', sans-serif;
+    font-size:15px;
+    font-weight:700;
+    color:#fff;
+    background:var(--navy);
+    border:none;
+    border-radius:8px;
+    padding:12px 0;
+    cursor:pointer;
+    margin-top:4px;
+  }
+  #sponsorSubmitBtn:active{ opacity:0.85; }
+  #sponsorSubmitBtn:disabled{ opacity:0.6; cursor:default; }
+  .form-msg{
+    font-size:13px;
+    font-weight:600;
+    margin-top:10px;
+    text-align:center;
+  }
+  .form-msg.ok{ color:#1E7A46; }
+  .form-msg.err{ color:#B23B4E; }
+
   .golf-card{
     transition:box-shadow .2s ease, border-color .2s ease;
   }
@@ -873,11 +942,47 @@
       </div>
       <div class="budget-row">
         <div class="budget-label">신청방법</div>
-        <div class="budget-desc">용민제 사무총장에게 문자 또는 톡으로 접수</div>
+        <div class="budget-desc">1. 용민제 사무총장에게 문자 또는 톡으로 접수<br>2. 아래 "협찬 신청하기" 란에 기재</div>
       </div>
     </div>
 
     <div class="notice blue">최강 ABC 5기 모두가 주인공이 되는 풍성한 워크샵이 될 수 있도록 많은 관심과 성원을 부탁드립니다. 다음번에도 기회가 많이 있으니 부담은 갖지 마시고요 🙂</div>
+
+    <div class="section-title" style="margin-top:26px;"><span class="tag">APPLY</span>협찬 신청하기</div>
+    <div class="card">
+      <form id="sponsorForm">
+        <div class="form-row">
+          <label for="sp_name">성명</label>
+          <input type="text" id="sp_name" name="성명" required placeholder="홍길동">
+        </div>
+
+        <div class="form-row">
+          <label>후원구분</label>
+          <div class="radio-row">
+            <label class="radio-pill"><input type="radio" name="후원구분" value="물품협찬" checked> 물품협찬</label>
+            <label class="radio-pill"><input type="radio" name="후원구분" value="현금찬조"> 현금찬조</label>
+          </div>
+        </div>
+
+        <div class="form-row" id="itemFields">
+          <label for="sp_item">협찬물품 (물품명 · 수량)</label>
+          <input type="text" id="sp_item" name="협찬물품" placeholder="예: 발렌타인 30년 1병">
+        </div>
+
+        <div class="form-row" id="cashFields" style="display:none;">
+          <label for="sp_amount">후원금액</label>
+          <input type="text" id="sp_amount" name="후원금액" placeholder="예: 500,000원">
+        </div>
+
+        <div class="form-row">
+          <label for="sp_memo">전달 방법 / 메모 <span style="color:var(--muted); font-weight:400;">(선택)</span></label>
+          <input type="text" id="sp_memo" name="메모" placeholder="예: 워크샵 당일 직접 전달 예정">
+        </div>
+
+        <button type="submit" id="sponsorSubmitBtn">신청하기</button>
+        <div id="sponsorMsg" class="form-msg"></div>
+      </form>
+    </div>
 
     <div class="meta" style="text-align:center; margin-top:16px;">- ABC 5기 2026 워크샵 준비위원단 일동 -</div>
   </div>
@@ -946,6 +1051,69 @@
             cell.scrollIntoView({behavior:'smooth', block:'center'});
           }
         }
+      });
+    });
+  }
+
+  // 후원구분 선택에 따라 입력 필드 전환
+  const radios = document.querySelectorAll('input[name="후원구분"]');
+  const itemFields = document.getElementById('itemFields');
+  const cashFields = document.getElementById('cashFields');
+  radios.forEach(r=>{
+    r.addEventListener('change', ()=>{
+      if(r.value === '물품협찬' && r.checked){
+        itemFields.style.display = '';
+        cashFields.style.display = 'none';
+      } else if(r.value === '현금찬조' && r.checked){
+        itemFields.style.display = 'none';
+        cashFields.style.display = '';
+      }
+    });
+  });
+
+  // 협찬 신청 폼 제출 (Formspree)
+  // ⚠️ 아래 주소를 본인의 Formspree 폼 주소로 교체하세요 (예: https://formspree.io/f/xxxxxxxx)
+  const SPONSOR_FORM_ENDPOINT = 'https://formspree.io/f/xojobndr';
+
+  const sponsorForm = document.getElementById('sponsorForm');
+  if(sponsorForm){
+    sponsorForm.addEventListener('submit', function(e){
+      e.preventDefault();
+      const msg = document.getElementById('sponsorMsg');
+      const btn = document.getElementById('sponsorSubmitBtn');
+
+      if(SPONSOR_FORM_ENDPOINT.includes('YOUR_FORM_ID')){
+        msg.textContent = '아직 제출 주소가 연결되지 않았습니다. (관리자: Formspree 주소를 등록해주세요)';
+        msg.className = 'form-msg err';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = '전송 중...';
+      msg.textContent = '';
+      msg.className = 'form-msg';
+
+      fetch(SPONSOR_FORM_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Accept': 'application/json' },
+        body: new FormData(sponsorForm)
+      }).then(res=>{
+        if(res.ok){
+          msg.textContent = '신청이 접수되었습니다. 감사합니다! 🙏';
+          msg.className = 'form-msg ok';
+          sponsorForm.reset();
+          itemFields.style.display = '';
+          cashFields.style.display = 'none';
+        } else {
+          msg.textContent = '전송 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.';
+          msg.className = 'form-msg err';
+        }
+      }).catch(()=>{
+        msg.textContent = '네트워크 오류로 전송하지 못했습니다.';
+        msg.className = 'form-msg err';
+      }).finally(()=>{
+        btn.disabled = false;
+        btn.textContent = '신청하기';
       });
     });
   }
