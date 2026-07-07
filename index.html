@@ -462,6 +462,57 @@
   .form-msg.ok{ color:#1E7A46; }
   .form-msg.err{ color:#B23B4E; }
 
+  .weather-summary{
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:10px;
+    text-align:center;
+  }
+  .weather-summary .ws-item .ws-label{
+    font-size:12px;
+    color:var(--ink-soft);
+    margin-bottom:4px;
+  }
+  .weather-summary .ws-item .ws-value{
+    font-size:20px;
+    font-weight:700;
+    color:var(--ink);
+  }
+  .weather-summary .ws-item .ws-value.hi{ color:#B23B4E; }
+  .weather-summary .ws-item .ws-value.lo{ color:var(--navy); }
+
+  .whr-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:11px 14px;
+    border-bottom:1px solid var(--line);
+  }
+  .whr-row:last-child{ border-bottom:none; }
+  .whr-time{
+    flex:0 0 52px;
+    font-weight:700;
+    font-size:13.5px;
+    color:var(--ink);
+  }
+  .whr-temp{
+    flex:0 0 48px;
+    font-weight:700;
+    font-size:14.5px;
+    color:var(--ink);
+  }
+  .whr-precip{
+    flex:0 0 64px;
+    font-size:12.5px;
+    color:var(--navy);
+  }
+  .whr-wind{
+    flex:1;
+    font-size:12.5px;
+    color:var(--ink-soft);
+    text-align:right;
+  }
+
   .golf-card{
     transition:box-shadow .2s ease, border-color .2s ease;
   }
@@ -586,6 +637,7 @@
   <div class="tab" data-tab="golf">골프</div>
   <div class="tab" data-tab="budget">예산</div>
   <div class="tab" data-tab="sponsor">협찬</div>
+  <div class="tab" data-tab="weather">날씨</div>
 </div>
 
 <div class="wrap">
@@ -987,6 +1039,26 @@
     <div class="meta" style="text-align:center; margin-top:16px;">- ABC 5기 2026 워크샵 준비위원단 일동 -</div>
   </div>
 
+  <!-- 날씨 -->
+  <div class="panel" id="panel-weather">
+    <div class="section-title"><span class="tag">7.17 (금)</span>워크샵 날씨</div>
+
+    <div id="weatherLoading" class="meta">예보 불러오는 중...</div>
+
+    <div id="weatherContent" style="display:none;">
+      <div class="card">
+        <div class="weather-summary" id="weatherSummary"></div>
+      </div>
+
+      <div class="room-group-title">시간대별 예보</div>
+      <div class="sked" id="weatherHourly"></div>
+    </div>
+
+    <div id="weatherError" class="notice" style="display:none; margin-top:12px;"></div>
+
+    <div class="meta" style="margin-top:12px;">오로라 골프 &amp; 리조트(강원 원주시 신림면) 기준 · Open-Meteo 제공 예보이며, 실제 날씨와 다를 수 있습니다</div>
+  </div>
+
 </div>
 
 <footer>서울대학교 빅데이터AI CEO과정 5기 원우회</footer>
@@ -1117,6 +1189,90 @@
       });
     });
   }
+
+  // 날씨 (Open-Meteo, 오로라CC 좌표: 신림면 구학산로 1520)
+  (function(){
+    const LAT = 37.2088;
+    const LON = 128.0514;
+    const TARGET_DATE = '2026-07-17';
+    const HOURS_TO_SHOW = ['06:00','09:00','12:00','15:00','18:00','21:00'];
+
+    const url = 'https://api.open-meteo.com/v1/forecast'
+      + '?latitude=' + LAT + '&longitude=' + LON
+      + '&hourly=temperature_2m,precipitation,wind_speed_10m'
+      + '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum'
+      + '&timezone=Asia%2FSeoul'
+      + '&wind_speed_unit=ms'
+      + '&forecast_days=16';
+
+    const loading = document.getElementById('weatherLoading');
+    const content = document.getElementById('weatherContent');
+    const errBox = document.getElementById('weatherError');
+
+    fetch(url)
+      .then(res=>{
+        return res.json().then(json=>{
+          if(!res.ok){
+            const reason = (json && json.reason) ? json.reason : ('HTTP ' + res.status);
+            throw new Error(reason);
+          }
+          return json;
+        });
+      })
+      .then(data=>{
+        if(!data.daily || !data.hourly){
+          throw new Error('응답에 필요한 데이터가 없습니다');
+        }
+
+        // 7월 17일에 해당하는 일별 데이터 인덱스 찾기
+        const dayIdx = data.daily.time.findIndex(d => d === TARGET_DATE);
+        if(dayIdx === -1){
+          throw new Error('아직 7월 17일 예보가 제공되지 않습니다 (최대 16일 전부터 제공)');
+        }
+
+        const tMax = Math.round(data.daily.temperature_2m_max[dayIdx]);
+        const tMin = Math.round(data.daily.temperature_2m_min[dayIdx]);
+        const pSum = Math.round(data.daily.precipitation_sum[dayIdx] * 10) / 10;
+
+        document.getElementById('weatherSummary').innerHTML =
+          '<div class="ws-item"><div class="ws-label">최저기온</div><div class="ws-value lo">' + tMin + '°</div></div>' +
+          '<div class="ws-item"><div class="ws-label">최고기온</div><div class="ws-value hi">' + tMax + '°</div></div>' +
+          '<div class="ws-item"><div class="ws-label">일 강수량</div><div class="ws-value">' + pSum + 'mm</div></div>';
+
+        // 시간대별 (06/09/12/15/18/21시)
+        const times = data.hourly.time; // ["2026-07-17T00:00", ...]
+        let rows = '';
+        HOURS_TO_SHOW.forEach(hh=>{
+          const idx = times.findIndex(t => t === TARGET_DATE + 'T' + hh);
+          if(idx === -1) return;
+          const temp = Math.round(data.hourly.temperature_2m[idx]);
+          const precip = data.hourly.precipitation[idx];
+          const wind = data.hourly.wind_speed_10m[idx];
+          const rain = (precip && precip > 0) ? ('☂️ ' + precip.toFixed(1) + 'mm') : '강수 없음';
+
+          rows += '<div class="whr-row">'
+            + '<div class="whr-time">' + hh.slice(0,2) + '시</div>'
+            + '<div class="whr-temp">' + temp + '°</div>'
+            + '<div class="whr-precip">' + rain + '</div>'
+            + '<div class="whr-wind">풍속 ' + wind.toFixed(1) + 'm/s</div>'
+            + '</div>';
+        });
+
+        if(!rows){
+          throw new Error('시간대별 데이터를 찾지 못했습니다');
+        }
+
+        document.getElementById('weatherHourly').innerHTML = rows;
+        loading.style.display = 'none';
+        content.style.display = '';
+      })
+      .catch(err=>{
+        loading.style.display = 'none';
+        errBox.style.display = '';
+        errBox.textContent = '날씨 정보를 불러오지 못했습니다 (' + err.message + ')';
+        console.error('Weather fetch error:', err);
+      });
+  })();
 </script>
 
 </body>
