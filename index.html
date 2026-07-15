@@ -1237,88 +1237,106 @@
     });
   }
 
-  // 날씨 (Open-Meteo, 오로라CC 좌표: 신림면 구학산로 1520)
+  // 날씨 (오로라CC 좌표: 신림면 구학산로 1520)
   (function(){
     const LAT = 37.2088;
     const LON = 128.0514;
     const TARGET_DATE = '2026-07-17';
     const HOURS_TO_SHOW = ['06:00','09:00','12:00','15:00','18:00','21:00'];
 
-    const url = 'https://api.open-meteo.com/v1/forecast'
-      + '?latitude=' + LAT + '&longitude=' + LON
+    const qs = '?latitude=' + LAT + '&longitude=' + LON
       + '&hourly=temperature_2m,precipitation,wind_speed_10m'
       + '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum'
-      + '&timezone=Asia%2FSeoul'
-      + '&wind_speed_unit=ms'
-      + '&forecast_days=16';
+      + '&timezone=Asia%2FSeoul&wind_speed_unit=ms&forecast_days=16';
+
+    // 한 곳이 막혀도 다음 주소로 자동 재시도
+    const ENDPOINTS = [
+      'https://api.open-meteo.com/v1/forecast' + qs,
+      'https://api.open-meteo.com/v1/gfs' + qs,
+      'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://api.open-meteo.com/v1/forecast' + qs)
+    ];
 
     const loading = document.getElementById('weatherLoading');
     const content = document.getElementById('weatherContent');
-    const errBox = document.getElementById('weatherError');
+    const errBox  = document.getElementById('weatherError');
 
-    fetch(url)
-      .then(res=>{
-        return res.json().then(json=>{
-          if(!res.ok){
-            const reason = (json && json.reason) ? json.reason : ('HTTP ' + res.status);
-            throw new Error(reason);
-          }
-          return json;
-        });
-      })
-      .then(data=>{
-        if(!data.daily || !data.hourly){
-          throw new Error('응답에 필요한 데이터가 없습니다');
-        }
+    function render(data){
+      if(!data || !data.daily || !data.hourly) throw new Error('데이터 형식 오류');
 
-        // 7월 17일에 해당하는 일별 데이터 인덱스 찾기
-        const dayIdx = data.daily.time.findIndex(d => d === TARGET_DATE);
-        if(dayIdx === -1){
-          throw new Error('아직 7월 17일 예보가 제공되지 않습니다 (최대 16일 전부터 제공)');
-        }
+      const dayIdx = data.daily.time.indexOf(TARGET_DATE);
+      if(dayIdx === -1) throw new Error('아직 해당 날짜 예보가 제공되지 않습니다');
 
-        const tMax = Math.round(data.daily.temperature_2m_max[dayIdx]);
-        const tMin = Math.round(data.daily.temperature_2m_min[dayIdx]);
-        const pSum = Math.round(data.daily.precipitation_sum[dayIdx] * 10) / 10;
+      const tMax = Math.round(data.daily.temperature_2m_max[dayIdx]);
+      const tMin = Math.round(data.daily.temperature_2m_min[dayIdx]);
+      const pSum = Math.round(data.daily.precipitation_sum[dayIdx] * 10) / 10;
 
-        document.getElementById('weatherSummary').innerHTML =
-          '<div class="ws-item"><div class="ws-label">최저기온</div><div class="ws-value lo">' + tMin + '°</div></div>' +
-          '<div class="ws-item"><div class="ws-label">최고기온</div><div class="ws-value hi">' + tMax + '°</div></div>' +
-          '<div class="ws-item"><div class="ws-label">일 강수량</div><div class="ws-value">' + pSum + 'mm</div></div>';
+      document.getElementById('weatherSummary').innerHTML =
+        '<div class="ws-item"><div class="ws-label">최저기온</div><div class="ws-value lo">' + tMin + '°</div></div>' +
+        '<div class="ws-item"><div class="ws-label">최고기온</div><div class="ws-value hi">' + tMax + '°</div></div>' +
+        '<div class="ws-item"><div class="ws-label">일 강수량</div><div class="ws-value">' + pSum + 'mm</div></div>';
 
-        // 시간대별 (06/09/12/15/18/21시)
-        const times = data.hourly.time; // ["2026-07-17T00:00", ...]
-        let rows = '';
-        HOURS_TO_SHOW.forEach(hh=>{
-          const idx = times.findIndex(t => t === TARGET_DATE + 'T' + hh);
-          if(idx === -1) return;
-          const temp = Math.round(data.hourly.temperature_2m[idx]);
-          const precip = data.hourly.precipitation[idx];
-          const wind = data.hourly.wind_speed_10m[idx];
-          const rain = (precip && precip > 0) ? ('☂️ ' + precip.toFixed(1) + 'mm') : '강수 없음';
-
-          rows += '<div class="whr-row">'
-            + '<div class="whr-time">' + hh.slice(0,2) + '시</div>'
-            + '<div class="whr-temp">' + temp + '°</div>'
-            + '<div class="whr-precip">' + rain + '</div>'
-            + '<div class="whr-wind">풍속 ' + wind.toFixed(1) + 'm/s</div>'
-            + '</div>';
-        });
-
-        if(!rows){
-          throw new Error('시간대별 데이터를 찾지 못했습니다');
-        }
-
-        document.getElementById('weatherHourly').innerHTML = rows;
-        loading.style.display = 'none';
-        content.style.display = '';
-      })
-      .catch(err=>{
-        loading.style.display = 'none';
-        errBox.style.display = '';
-        errBox.textContent = '날씨 정보를 불러오지 못했습니다 (' + err.message + ')';
-        console.error('Weather fetch error:', err);
+      const times = data.hourly.time;
+      let rows = '';
+      HOURS_TO_SHOW.forEach(hh=>{
+        const idx = times.indexOf(TARGET_DATE + 'T' + hh);
+        if(idx === -1) return;
+        const temp   = Math.round(data.hourly.temperature_2m[idx]);
+        const precip = data.hourly.precipitation[idx];
+        const wind   = data.hourly.wind_speed_10m[idx];
+        const rain   = (precip && precip > 0) ? ('☂️ ' + precip.toFixed(1) + 'mm') : '강수 없음';
+        rows += '<div class="whr-row">'
+          + '<div class="whr-time">' + hh.slice(0,2) + '시</div>'
+          + '<div class="whr-temp">' + temp + '°</div>'
+          + '<div class="whr-precip">' + rain + '</div>'
+          + '<div class="whr-wind">풍속 ' + wind.toFixed(1) + 'm/s</div>'
+          + '</div>';
       });
+      if(!rows) throw new Error('시간대별 데이터 없음');
+
+      document.getElementById('weatherHourly').innerHTML = rows;
+      loading.style.display = 'none';
+      errBox.style.display  = 'none';
+      content.style.display = '';
+    }
+
+    function load(){
+      loading.style.display = '';
+      loading.textContent = '예보 불러오는 중...';
+      errBox.style.display = 'none';
+      content.style.display = 'none';
+
+      let i = 0;
+      function attempt(){
+        if(i >= ENDPOINTS.length){
+          fail('네트워크 연결을 확인해주세요');
+          return;
+        }
+        fetch(ENDPOINTS[i])
+          .then(r => r.json())
+          .then(json => {
+            const d = (typeof json === 'string') ? JSON.parse(json) : json;
+            render(d);
+          })
+          .catch(err => {
+            console.warn('Weather source ' + (i+1) + ' failed:', err);
+            i++;
+            attempt();
+          });
+      }
+      attempt();
+    }
+
+    function fail(msg){
+      loading.style.display = 'none';
+      content.style.display = 'none';
+      errBox.style.display = '';
+      errBox.innerHTML = '날씨 정보를 불러오지 못했습니다.<br><span style="font-size:12px; color:var(--muted);">' + msg + '</span>'
+        + '<br><button id="weatherRetry" style="margin-top:10px; font-family:inherit; font-size:13px; font-weight:700; color:#fff; background:var(--navy); border:none; border-radius:8px; padding:8px 18px; cursor:pointer;">다시 시도</button>';
+      const btn = document.getElementById('weatherRetry');
+      if(btn) btn.addEventListener('click', load);
+    }
+
+    load();
   })();
 </script>
 
